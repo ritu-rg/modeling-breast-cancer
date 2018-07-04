@@ -1,0 +1,166 @@
+---
+title: "Breast Cancer Modelling"
+author: "Ritu"
+date: "December 14, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+###### Modelling on Breast Cancer Wisconsin dataset #########
+
+##------------------ Data Input-----------------------------
+##Loading libraries
+rm(list=ls()) ; gc()
+library(dplyr)			# For data manipulation
+library(ggplot2)		# For plotting 
+library(caret)			# for data-preprocessing & for data-partitioning
+library(gmodels)    # for confidence interval/accuracy, ci
+library(nnet)       # for neural netwroks
+library(readr)      # read_csv() is fast read facility
+library(vcd)        # For association plots
+library(C50)			  # For decision tree induction classification
+library(devtools)   # For downloading function from github
+source_url('https://gist.githubusercontent.com/fawda123/7471137/raw/466c1474d0a505ff044412703516c34f1a4684a5/nnet_plot_update.r')
+
+
+
+##Reading data
+setwd("C:\\Users\\Ritu\\Documents\\Learning\\EL\\12-2-3\\Exercises")
+bck_nn<-read.csv("data.csv", header = TRUE, sep = ",")
+str(bck_nn)
+
+
+##------------------ Data Transformation-----------------------------
+##Transforming data
+
+#Remove un required columns
+bck_nn <- bck_nn[,-33]
+bck_nn <- bck_nn[,-1]
+
+#Convert diagnosis column to factor
+bck_nn$diagnosis <- as.factor(bck_nn$diagnosis)
+levels(bck_nn$diagnosis)
+
+#Remove NAs
+nas <- sum(is.na(bck_nn))
+nas
+
+##Analyzing data
+View(bck_nn)
+str(bck_nn)
+dim(bck_nn)
+head(bck_nn)
+colnames(bck_nn)
+
+
+
+##------------------ Data Pre-process (PCA) -----------------------------
+##Preprocess data by applying PCA
+trans = preProcess(bck_nn[,-1],  method=c("pca", "center", "scale"))
+
+# Examine pca behaviour
+trans$numComp       # Get no of principal components for 'thresh' of 0.95
+
+# Get transfromed data using predict() from 'trans' model
+PC = predict(trans, bck_nn[,-1])		# Returns scaled, centered data with pricipal components
+dim(PC)      # 77 columns
+class(PC)    # it is a data frame
+View(PC)
+
+# Merge the removed column with the pre processed data
+bck_n <- cbind(PC, diagnosis = bck_nn[,1])
+View(bck_n)
+
+
+##Partition data
+#Partition data in train/validation sets
+bck_index<-createDataPartition(bck_n$diagnosis,p=0.8,list=FALSE)
+tr<-bck_n[bck_index,]  ;     dim(tr)
+valid<-bck_n[-bck_index,]  ; dim(valid)
+
+
+
+##------------------ Applying Decision Tree Modelling on the data -----------------------------
+##Decision Tree
+(a=Sys.time())   # Note starting time
+dt<-C5.0(diagnosis ~ ., data=tr,
+                      trials=15,                  # creating max 5 weak learners or no of boosting steps
+                      control = C5.0Control      # parameter control list. May specify separately
+                        (                        
+                           noGlobalPruning = FALSE, # Should global pruning be done?
+                           CF=0.5,                  # Larger CF=>Less tree-pruning.Smaller values=>More
+                           minCases=5,              # Min cases per leaf-node
+                           sample = 0.80,           # Take 80% sample for training. Rest 20% used for testing 
+                           winnow=FALSE,            # TRUE may make it more general
+                           earlyStopping=TRUE       # Should boosting be stopped early?
+                        )
+           )
+
+(b =Sys.time())       # Note ending time
+
+#Summarize decision tree
+summary(dt)    # Result summary
+
+#Plot the decision tree
+plot(dt)
+
+
+# Make prediction for validation set
+y<- predict(dt, valid , type="class")
+df<-data.frame(predicted=y, actual=valid$diagnosis ) 
+View(df)
+
+#Plot predictions
+plot(df)
+
+
+## Verify accuracy of predictions
+table(df$actual, df$predicted, dnn=c("Actual","Predicted"))
+
+# Accuracy
+accuracy<-sum(as.character(df$actual) == as.character(df$predicted))/nrow(df)
+accuracy
+
+
+
+
+##------------------ Applying Neural Network Modelling on the data -----------------------------
+##Neural Network
+(a=Sys.time())   # Note starting time
+
+nn<-nnet(diagnosis ~ ., tr, size = 5, rang = 0.1, decay = 5e-4, maxit = 500, linear.output = T) 
+
+(b =Sys.time())       # Note ending time
+
+#Summarize Neural Network
+summary(nn)    # Result summary
+
+# Plot the Neural Network
+par(mar=numeric(4),mfrow=c(1,2),family='serif')
+plot.nnet(nn)
+
+# Make prediction for validation set
+z<- predict(nn, valid , type="class")
+nf<-data.frame(predicted=z, actual=valid$diagnosis ) 
+View(nf)
+
+#Plot predictions
+par(mar=numeric(4),mfrow=c(1,2),family='serif')
+plot(nf)
+
+
+## Verify accuracy of predictions
+table(nf$actual, nf$predicted, dnn=c("Actual","Predicted"))
+
+# Accuracy
+accuracy<-sum(as.character(nf$actual) == as.character(nf$predicted))/nrow(nf)
+accuracy
+
+
+
+```
+
